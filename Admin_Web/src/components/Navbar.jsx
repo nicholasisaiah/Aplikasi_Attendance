@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
-import { Clock, User } from 'lucide-react';
+import { Clock, User, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Navbar() {
   const [adminEmail, setAdminEmail] = useState('');
   const [timeString, setTimeString] = useState('');
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     // Get current user email
@@ -37,6 +39,11 @@ export default function Navbar() {
       </div>
 
       <div style={styles.rightSection}>
+        {/* Theme Toggle */}
+        <button onClick={toggleTheme} style={styles.themeToggleBtn} title="Toggle Theme">
+          {theme === 'dark' ? <Sun size={18} color="var(--text-dark)" /> : <Moon size={18} color="var(--text-dark)" />}
+        </button>
+
         {/* Live Clock Card */}
         <div style={styles.clockCard}>
           <Clock size={16} style={{ color: 'var(--color-primary)' }} />
@@ -61,7 +68,7 @@ export default function Navbar() {
 const styles = {
   navbar: {
     height: 'var(--navbar-height)',
-    backgroundColor: '#FFFFFF',
+    background: 'repeating-linear-gradient(-45deg, rgba(155, 101, 45, 0.03), rgba(155, 101, 45, 0.03) 6px, transparent 6px, transparent 12px), linear-gradient(to right, var(--bg-workspace) 0%, var(--bg-card) 400px)',
     borderBottom: '1.5px solid var(--border-color)',
     display: 'flex',
     alignItems: 'center',
@@ -91,6 +98,18 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '20px',
+  },
+  themeToggleBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '50%',
+    backgroundColor: 'var(--bg-workspace)',
+    border: '1px solid var(--border-color)',
   },
   clockCard: {
     display: 'flex',

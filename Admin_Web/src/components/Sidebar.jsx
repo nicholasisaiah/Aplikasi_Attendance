@@ -7,6 +7,7 @@ import {
   Calendar, 
   Megaphone, 
   FileSpreadsheet, 
+  Settings,
   LogOut 
 } from 'lucide-react';
 import { supabase } from '../supabase';
@@ -28,17 +29,14 @@ export default function Sidebar() {
     { path: '/jadwal', label: 'Jadwal Pelajaran', icon: Calendar },
     { path: '/pengumuman', label: 'Pengumuman', icon: Megaphone },
     { path: '/import-csv', label: 'Import CSV Log', icon: FileSpreadsheet },
+    { path: '/pengaturan', label: 'Pengaturan', icon: Settings },
   ];
 
   return (
     <aside style={styles.sidebar}>
       {/* Brand Header */}
       <div style={styles.brandContainer}>
-        <div style={styles.logoCircle}>A</div>
-        <div>
-          <h2 style={styles.brandTitle}>ASISI ATTENDANCE</h2>
-          <span style={styles.brandSubtitle}>Admin Panel</span>
-        </div>
+        <img src="/smk-asisi-logo.png" alt="SMK Asisi Logo" style={{ width: '100%', maxWidth: '170px', height: 'auto', objectFit: 'contain' }} />
       </div>
 
       {/* Nav Menu */}
@@ -85,15 +83,15 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     zIndex: 100,
-    borderRight: '1px solid rgba(255, 255, 255, 0.05)',
   },
   brandContainer: {
     height: 'var(--navbar-height)',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: '0 20px',
-    gap: '12px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'repeating-linear-gradient(-45deg, rgba(155, 101, 45, 0.03), rgba(155, 101, 45, 0.03) 6px, transparent 6px, transparent 12px), var(--bg-workspace)',
+    borderBottom: '1.5px solid var(--border-color)',
   },
   logoCircle: {
     width: '36px',

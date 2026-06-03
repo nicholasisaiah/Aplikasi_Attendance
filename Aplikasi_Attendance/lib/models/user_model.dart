@@ -6,6 +6,8 @@ class UserProfile {
   final String? classId;
   final String? className; // mapped from join
   final String? major; // mapped from join classes.major
+  final String? homeroomTeacher; // mapped from join classes -> homeroom_teacher
+  final String? homeroomTeacherPhone; // mapped from join classes -> homeroom_teacher
   final String? phone;
   final String? avatarUrl;
   final List<String> parentOf;
@@ -18,6 +20,8 @@ class UserProfile {
     this.classId,
     this.className,
     this.major,
+    this.homeroomTeacher,
+    this.homeroomTeacherPhone,
     this.phone,
     this.avatarUrl,
     this.parentOf = const [],
@@ -31,6 +35,15 @@ class UserProfile {
 
     final classData = json['classes'] as Map<String, dynamic>?;
 
+    // Parse homeroom teacher from nested join
+    String? homeroomTeacherName;
+    String? homeroomTeacherPhone;
+    if (classData != null && classData['homeroom_teacher'] != null) {
+      final teacherData = classData['homeroom_teacher'] as Map<String, dynamic>;
+      homeroomTeacherName = teacherData['full_name'] as String?;
+      homeroomTeacherPhone = teacherData['phone'] as String?;
+    }
+
     return UserProfile(
       id: json['id'] as String,
       fullName: json['full_name'] as String,
@@ -39,6 +52,8 @@ class UserProfile {
       classId: json['class_id'] as String?,
       className: classData != null ? classData['name'] as String? : null,
       major: classData != null ? classData['major'] as String? : null,
+      homeroomTeacher: homeroomTeacherName,
+      homeroomTeacherPhone: homeroomTeacherPhone,
       phone: json['phone'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       parentOf: parsedParentOf,

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -8,6 +9,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
+  const { setTheme } = useTheme();
+
+  useEffect(() => {
+    // Check if user is already logged in
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate('/');
+      }
+    });
+    // Force light mode on login page
+    setTheme('light');
+  }, [navigate, setTheme]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -56,12 +69,14 @@ export default function Login() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.loginCard}>
-        <div style={styles.header}>
-          <div style={styles.logo}>A</div>
-          <h2 style={styles.title}>ASISI ATTENDANCE</h2>
-          <p style={styles.subtitle}>Log in to admin dashboard</p>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '390px' }}>
+        
+        {/* LOGO */}
+        <img 
+          src="/smk-asisi-logo.png" 
+          alt="SMK Asisi Logo" 
+          style={{ width: '250px', height: 'auto', marginBottom: '30px', objectFit: 'contain' }} 
+        />
 
         {errorMsg && (
           <div style={styles.errorAlert}>
@@ -69,42 +84,91 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              className="form-control"
-              placeholder="admin@asisi.sch.id"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
+        {/* WHITE CARD */}
+        <div style={{ 
+          backgroundColor: 'var(--bg-card)', 
+          borderRadius: '28px', 
+          border: '1.5px solid #D7CCB7', 
+          padding: '30px 26px', 
+          width: '100%',
+          marginBottom: '32px' 
+        }}>
+          <h2 style={{ 
+            fontSize: '28px', 
+            fontWeight: '900', 
+            color: 'var(--text-dark)', 
+            textAlign: 'center', 
+            marginBottom: '30px' 
+          }}>
+            Login
+          </h2>
 
-          <div className="form-group" style={{ marginBottom: '28px' }}>
-            <label className="form-label" htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              className="form-control"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+          <form id="login-form" onSubmit={handleLogin}>
+            <div className="form-group" style={{ marginBottom: '18px' }}>
+              <input
+                type="email"
+                id="email"
+                className="form-control"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{ 
+                  borderRadius: '40px', 
+                  textAlign: 'center', 
+                  padding: '16px', 
+                  fontSize: '15px', 
+                  fontWeight: '700',
+                  borderColor: '#D7CCB7',
+                  borderWidth: '1.6px'
+                }}
+              />
+            </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '12px', fontSize: '15px' }}
-            disabled={loading}
-          >
-            {loading ? 'Logging in...' : 'Sign In'}
-          </button>
-        </form>
+            <div className="form-group" style={{ marginBottom: '0' }}>
+              <input
+                type="password"
+                id="password"
+                className="form-control"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{ 
+                  borderRadius: '40px', 
+                  textAlign: 'center', 
+                  padding: '16px', 
+                  fontSize: '15px', 
+                  fontWeight: '700',
+                  borderColor: '#D7CCB7',
+                  borderWidth: '1.6px'
+                }}
+              />
+            </div>
+          </form>
+        </div>
+
+        {/* BUTTON */}
+        <button
+          type="submit"
+          form="login-form"
+          className="btn btn-primary"
+          style={{ 
+            width: '300px', 
+            padding: '16px', 
+            fontSize: '20px', 
+            borderRadius: '24px', 
+            fontWeight: '800',
+            backgroundColor: '#9B652D',
+            border: 'none',
+            color: 'white',
+            cursor: 'pointer'
+          }}
+          disabled={loading}
+        >
+          {loading ? 'Logging in...' : 'Login'}
+        </button>
+
       </div>
     </div>
   );
@@ -122,7 +186,7 @@ const styles = {
   loginCard: {
     width: '100%',
     maxWidth: '400px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid var(--border-color)',
     padding: '36px',

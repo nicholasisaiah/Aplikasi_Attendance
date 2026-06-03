@@ -6,15 +6,14 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function main() {
-  console.log("Fetching profiles...");
-  const { data: profiles, error: pErr } = await supabase.from('profiles').select('*');
-  if (pErr) console.error("Profiles error:", pErr);
-  else console.log("Profiles in DB:", profiles);
-
-  console.log("Fetching classes...");
-  const { data: classes, error: cErr } = await supabase.from('classes').select('*');
-  if (cErr) console.error("Classes error:", cErr);
-  else console.log("Classes in DB:", classes);
+  console.log("Fetching attendances...");
+  const { data: attendances, error: aErr } = await supabase
+    .from('attendances')
+    .select('*, profiles:profiles!student_id(full_name)')
+    .limit(10);
+  
+  if (aErr) console.error("Attendances error:", aErr);
+  else console.log("Attendances in DB:", JSON.stringify(attendances, null, 2));
 }
 
 main();

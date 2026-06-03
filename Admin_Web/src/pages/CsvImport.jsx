@@ -1,18 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { supabase } from '../supabase';
-import { Upload, FileText, CheckCircle2, AlertCircle, Download, ArrowRight } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Download, ArrowRight, UserX, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function CsvImport() {
   const [file, setFile] = useState(null);
   const [parsedData, setParsedData] = useState([]);
   const [studentsMap, setStudentsMap] = useState({}); // fingerprint_id -> student profile
+  const [allStudents, setAllStudents] = useState([]); // all student profiles
   const [loading, setLoading] = useState(false);
-  const [importStatus, setImportStatus] = useState(null); // { success: X, errors: Y, details: [...] }
+  const [importStatus, setImportStatus] = useState(null);
   const [schoolSettings, setSchoolSettings] = useState({ lateThreshold: '07:00:00' });
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
   useEffect(() => {
-    // 1. Fetch all student profiles to map fingerprint_id -> profile
+    // 1. Fetch all student profiles
     const fetchStudents = async () => {
       const { data, error } = await supabase
         .from('profiles')
@@ -20,6 +25,7 @@ export default function CsvImport() {
         .eq('role', 'student');
       
       if (!error && data) {
+        setAllStudents(data);
         const mapping = {};
         data.forEach(student => {
           if (student.fingerprint_id !== null) {
@@ -52,6 +58,7 @@ export default function CsvImport() {
       setFile(selectedFile);
       setImportStatus(null);
       setParsedData([]);
+      setCurrentPage(1);
       
       // Parse file preview
       Papa.parse(selectedFile, {
@@ -67,25 +74,31 @@ export default function CsvImport() {
     }
   };
 
-  const calculateIsLate = (timestampStr) => {
+  // Check if time string (HH:MM:SS) is late
+  const isTimeLate = (timeStr) => {
     try {
-      // Expecting format: YYYY-MM-DD HH:MM:SS or ISO
-      const dateObj = new Date(timestampStr.replace(' ', 'T'));
-      const hours = dateObj.getHours();
-      const minutes = dateObj.getMinutes();
-      const seconds = dateObj.getSeconds();
+      const parts = timeStr.split(':');
+      const checkInSecs = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2] || 0);
       
-      const checkInSecs = hours * 3600 + minutes * 60 + seconds;
-      
-      // Convert threshold e.g. "07:00:00" to seconds
       const thresholdParts = schoolSettings.lateThreshold.split(':');
       const thresholdSecs = parseInt(thresholdParts[0]) * 3600 + parseInt(thresholdParts[1]) * 60 + parseInt(thresholdParts[2] || 0);
       
       return checkInSecs > thresholdSecs;
     } catch (e) {
-      // Default fallback: if hour is 7 or more, mark late
       return true;
     }
+  };
+
+  // Extract row data from the new CSV format
+  const extractRowData = (row) => {
+    const rawFid = row.ID || row.FingerprintID || row.fingerprint_id || row.EnrollID;
+    const rawDate = row.Tanggal || row.Date || row.date;
+    const rawCheckIn = row.Waktu_Masuk || row.Timestamp || row.timestamp;
+    const rawCheckOut = row.Waktu_Keluar || null;
+    const rawName = row.Nama || row.Name || null;
+    const rawClass = row.Kelas || row.Class || null;
+
+    return { rawFid, rawDate, rawCheckIn, rawCheckOut, rawName, rawClass };
   };
 
   const handleImport = async () => {
@@ -96,20 +109,27 @@ export default function CsvImport() {
 
     let successCount = 0;
     let errorCount = 0;
+    let absentCount = 0;
     const details = [];
 
-    // Process row by row
+    // Track which students are present per date
+    const presentStudentsByDate = {}; // { 'YYYY-MM-DD': Set of student_id }
+    const uniqueDates = new Set();
+
+    // Payloads to bulk upsert
+    const upsertPayloads = [];
+
+    // Phase 1: Process CSV rows
     for (let i = 0; i < parsedData.length; i++) {
       const row = parsedData[i];
-      const rawFid = row.FingerprintID || row.fingerprint_id || row.EnrollID;
-      const rawTime = row.Timestamp || row.timestamp || row.DateTime;
+      const { rawFid, rawDate, rawCheckIn, rawCheckOut } = extractRowData(row);
 
-      if (!rawFid || !rawTime) {
+      if (!rawFid || !rawDate || !rawCheckIn) {
         errorCount++;
         details.push({
           row: i + 1,
           status: 'error',
-          message: 'Kolom FingerprintID atau Timestamp tidak ditemukan.'
+          message: 'Kolom ID, Tanggal, atau Waktu_Masuk tidak ditemukan/kosong.'
         });
         continue;
       }
@@ -127,43 +147,106 @@ export default function CsvImport() {
         continue;
       }
 
-      try {
-        const timeObj = new Date(rawTime.replace(' ', 'T'));
-        const dateStr = rawTime.split(' ')[0] || rawTime.split('T')[0];
-        const isLate = calculateIsLate(rawTime);
+      const dateStr = rawDate.trim();
+      const checkInTimeStr = rawCheckIn.trim();
+      const checkOutTimeStr = rawCheckOut ? rawCheckOut.trim() : null;
 
-        // Perform Upsert in database
-        const payload = {
-          student_id: student.id,
-          date: dateStr,
-          check_in_time: timeObj.toISOString(),
-          status: 'hadir',
-          is_late: isLate,
-          method: 'csv_import'
-        };
+      // Hadir = punya Waktu_Masuk DAN Waktu_Keluar
+      const isFullyPresent = checkInTimeStr && checkOutTimeStr;
 
-        // Suppressing conflict and updating check_in_time
-        const { error } = await supabase
-          .from('attendances')
-          .upsert(payload, { onConflict: 'student_id,date' });
+      // Build ISO timestamps
+      const checkInISO = new Date(`${dateStr}T${checkInTimeStr}`).toISOString();
+      const checkOutISO = checkOutTimeStr ? new Date(`${dateStr}T${checkOutTimeStr}`).toISOString() : null;
 
-        if (error) throw error;
+      const isLate = isTimeLate(checkInTimeStr);
 
+      upsertPayloads.push({
+        student_id: student.id,
+        date: dateStr,
+        check_in_time: checkInISO,
+        check_out_time: checkOutISO,
+        status: isFullyPresent ? 'hadir' : 'tanpa_keterangan',
+        is_late: isFullyPresent ? isLate : false,
+        method: 'csv_import',
+        notes: isFullyPresent ? null : 'Hanya scan masuk, tidak scan keluar'
+      });
+
+      // Track present student for this date
+      uniqueDates.add(dateStr);
+      if (!presentStudentsByDate[dateStr]) {
+        presentStudentsByDate[dateStr] = new Set();
+      }
+      presentStudentsByDate[dateStr].add(student.id);
+
+      if (isFullyPresent) {
         successCount++;
         details.push({
           row: i + 1,
           status: 'success',
           studentName: student.full_name,
           className: student.classes?.name || 'Umum',
-          time: rawTime.split(' ')[1] || rawTime.split('T')[1],
+          time: checkInTimeStr.substring(0, 5),
           isLate
         });
-      } catch (err) {
-        errorCount++;
+      } else {
+        absentCount++;
         details.push({
           row: i + 1,
+          status: 'incomplete',
+          studentName: student.full_name,
+          className: student.classes?.name || 'Umum',
+          time: checkInTimeStr.substring(0, 5)
+        });
+      }
+    }
+
+    // Phase 2: Auto-fill absent students for each unique date
+    for (const dateStr of uniqueDates) {
+      const presentIds = presentStudentsByDate[dateStr] || new Set();
+      const absentStudents = allStudents.filter(s => !presentIds.has(s.id));
+
+      for (const student of absentStudents) {
+        upsertPayloads.push({
+          student_id: student.id,
+          date: dateStr,
+          check_in_time: null,
+          check_out_time: null,
+          status: 'tanpa_keterangan',
+          is_late: false,
+          method: 'csv_import',
+          notes: null
+        });
+
+        absentCount++;
+        details.push({
+          row: '-',
+          status: 'absent',
+          studentName: student.full_name,
+          className: student.classes?.name || 'Umum',
+          date: dateStr
+        });
+      }
+    }
+
+    // Phase 3: Execute Bulk Upsert
+    if (upsertPayloads.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('attendances')
+          .upsert(upsertPayloads, { onConflict: 'student_id,date', ignoreDuplicates: false });
+
+        if (error) throw error;
+      } catch (err) {
+        // If bulk fails, mark everything as error
+        console.error("Bulk upsert failed", err);
+        errorCount += upsertPayloads.length;
+        successCount = 0;
+        absentCount = 0;
+        details.length = 0; // Clear details
+        details.push({
+          row: '-',
           status: 'error',
-          message: err.message || 'Gagal menyimpan data absensi ke Supabase.'
+          message: err.message || 'Gagal menyimpan data absensi secara massal ke Supabase.'
         });
       }
     }
@@ -171,49 +254,52 @@ export default function CsvImport() {
     setImportStatus({
       success: successCount,
       errors: errorCount,
+      absent: absentCount,
+      dates: [...uniqueDates],
       details
     });
     setLoading(false);
   };
 
   const handleDownloadSample = () => {
-    // Generate simple mock CSV with students mapped to simulate fingerprint output
-    const headers = 'FingerprintID,Timestamp\n';
+    const headers = 'ID,Nama,Kelas,Tanggal,Waktu_Masuk,Waktu_Keluar\n';
     
-    // Check if we have registered students with fingerprint IDs to make sample valid
     const fIds = Object.keys(studentsMap);
     let rows = '';
     
     const today = new Date().toISOString().split('T')[0];
 
     if (fIds.length > 0) {
-      // Row 1: Ontime
-      rows += `${fIds[0]},${today} 06:45:00\n`;
-      // Row 2: Late
+      const s1 = studentsMap[fIds[0]];
+      rows += `${fIds[0]},${s1.full_name},${s1.classes?.name || 'Umum'},${today},06:45:00,14:00:00\n`;
       if (fIds.length > 1) {
-        rows += `${fIds[1]},${today} 07:15:30\n`;
-      }
-      // Row 3: Ontime limit
-      if (fIds.length > 2) {
-        rows += `${fIds[2]},${today} 06:58:12\n`;
+        const s2 = studentsMap[fIds[1]];
+        rows += `${fIds[1]},${s2.full_name},${s2.classes?.name || 'Umum'},${today},07:15:30,14:05:00\n`;
       }
     } else {
-      // Fallback defaults
-      rows += `1,${today} 06:45:00\n`;
-      rows += `2,${today} 07:15:30\n`;
+      rows += `1204,Zeki Tampubolon,XII AKL,${today},06:54:32,14:09:04\n`;
+      rows += `1340,Uci Batubara,X TKJ,${today},06:33:32,14:04:03\n`;
     }
-    
-    // Add an invalid row for testing error handler
-    rows += `99,${today} 07:05:00\n`;
 
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `fingerprint_simulasi_${today}.csv`);
+    link.setAttribute('download', `attendance_data_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Preview helper: extract and check a row
+  const previewRow = (row) => {
+    const { rawFid, rawDate, rawCheckIn, rawCheckOut, rawName, rawClass } = extractRowData(row);
+    const fId = rawFid ? parseInt(rawFid) : NaN;
+    const student = studentsMap[fId];
+    const checkOutStr = rawCheckOut ? rawCheckOut.trim() : '';
+    const isFullyPresent = rawCheckIn && checkOutStr;
+    const isLate = rawCheckIn ? isTimeLate(rawCheckIn.trim()) : false;
+    return { fId, rawDate, rawCheckIn, rawCheckOut, rawName, rawClass, student, isLate, isFullyPresent };
   };
 
   return (
@@ -229,12 +315,12 @@ export default function CsvImport() {
         </button>
       </div>
 
-      {/* Drag & Drop Upload Zone */}
+      {/* Upload Zone */}
       <div style={styles.uploadCard}>
         <div style={styles.uploadZone}>
           <Upload size={40} style={{ color: 'var(--color-primary)', marginBottom: '12px' }} />
           <h3 style={{ fontSize: '16px', marginBottom: '4px' }}>Pilih File CSV Log Sidik Jari</h3>
-          <p style={{ fontSize: '13px', marginBottom: '16px' }}>Format kolom: FingerprintID, Timestamp (YYYY-MM-DD HH:MM:SS)</p>
+          <p style={{ fontSize: '13px', marginBottom: '16px' }}>Format kolom: ID, Nama, Kelas, Tanggal, Waktu_Masuk, Waktu_Keluar</p>
           
           <input
             type="file"
@@ -267,56 +353,82 @@ export default function CsvImport() {
             </button>
           </div>
 
+          {/* Info: auto-fill absent */}
+          <div style={styles.infoBox}>
+            <UserX size={16} color="var(--color-info)" />
+            <span>Siswa dianggap <strong>Hadir</strong> jika memiliki <strong>Waktu Masuk dan Waktu Keluar</strong>. Siswa yang hanya scan masuk atau tidak ada di CSV akan ditandai sebagai <strong>Tanpa Keterangan (Alfa)</strong>.</span>
+          </div>
+
           <div style={styles.previewTableWrapper}>
             <table className="admin-table" style={{ fontSize: '13px' }}>
               <thead>
                 <tr>
                   <th>Baris</th>
-                  <th>Fingerprint ID</th>
+                  <th>ID</th>
+                  <th>Nama (CSV)</th>
                   <th>Siswa Mapped</th>
-                  <th>Kelas Mapped</th>
-                  <th>Timestamp Scan</th>
-                  <th>Status Jam</th>
+                  <th>Tanggal</th>
+                  <th>Masuk</th>
+                  <th>Keluar</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {parsedData.slice(0, 5).map((row, index) => {
-                  const fid = parseInt(row.FingerprintID || row.fingerprint_id || row.EnrollID);
-                  const time = row.Timestamp || row.timestamp || row.DateTime;
-                  const student = studentsMap[fid];
-                  const isLate = time ? calculateIsLate(time) : false;
+                {parsedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((row, index) => {
+                  const { fId, rawDate, rawCheckIn, rawCheckOut, rawName, student, isLate, isFullyPresent } = previewRow(row);
 
                   return (
                     <tr key={index}>
-                      <td>{index + 1}</td>
-                      <td style={{ fontWeight: '700' }}>{fid}</td>
+                      <td>{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                      <td style={{ fontWeight: '700' }}>{fId}</td>
+                      <td>{rawName || '-'}</td>
                       <td>{student ? student.full_name : <span style={{ color: 'var(--color-danger)', fontWeight: '700' }}>Tidak Dikenal</span>}</td>
-                      <td>{student ? (student.classes?.name || 'Umum') : '-'}</td>
-                      <td>{time}</td>
+                      <td>{rawDate || '-'}</td>
+                      <td>{rawCheckIn || '-'}</td>
+                      <td>{rawCheckOut || '-'}</td>
                       <td>
-                        {student ? (
-                          isLate ? (
-                            <span className="badge badge-warning" style={{ fontSize: '10px' }}>Terlambat</span>
-                          ) : (
-                            <span className="badge badge-success" style={{ fontSize: '10px' }}>Tepat Waktu</span>
-                          )
-                        ) : (
+                        {!student ? (
                           <span className="badge badge-danger" style={{ fontSize: '10px' }}>Gagal Map</span>
+                        ) : !isFullyPresent ? (
+                          <span className="badge badge-warning" style={{ fontSize: '10px' }}>Tidak Lengkap</span>
+                        ) : isLate ? (
+                          <span className="badge badge-warning" style={{ fontSize: '10px' }}>Terlambat</span>
+                        ) : (
+                          <span className="badge badge-success" style={{ fontSize: '10px' }}>Tepat Waktu</span>
                         )}
                       </td>
                     </tr>
                   );
                 })}
-                {parsedData.length > 5 && (
-                  <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      Menampilkan 5 dari {parsedData.length} baris...
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination Controls */}
+          {parsedData.length > itemsPerPage && (
+            <div style={styles.paginationWrapper}>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Menampilkan {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, parsedData.length)} dari {parsedData.length} baris
+              </span>
+              <div style={styles.paginationButtons}>
+                <button 
+                  style={styles.pageBtn} 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span style={{ fontSize: '13px', fontWeight: '700' }}>{currentPage} / {Math.ceil(parsedData.length / itemsPerPage)}</span>
+                <button 
+                  style={styles.pageBtn} 
+                  disabled={currentPage === Math.ceil(parsedData.length / itemsPerPage)}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(parsedData.length / itemsPerPage)))}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -333,7 +445,15 @@ export default function CsvImport() {
               <CheckCircle2 color="var(--color-success)" size={24} />
               <div>
                 <h2 style={{ color: 'var(--color-success)' }}>{importStatus.success}</h2>
-                <span style={{ fontSize: '13px', fontWeight: '700' }}>Sukses Diupload</span>
+                <span style={{ fontSize: '13px', fontWeight: '700' }}>Hadir (dari CSV)</span>
+              </div>
+            </div>
+
+            <div style={{ ...styles.reportStat, borderColor: 'var(--color-warning)' }}>
+              <UserX color="var(--color-warning)" size={24} />
+              <div>
+                <h2 style={{ color: 'var(--color-warning)' }}>{importStatus.absent}</h2>
+                <span style={{ fontSize: '13px', fontWeight: '700' }}>Ditandai Tidak Hadir</span>
               </div>
             </div>
 
@@ -346,29 +466,54 @@ export default function CsvImport() {
             </div>
           </div>
 
+          {importStatus.dates && importStatus.dates.length > 0 && (
+            <div style={styles.datesInfo}>
+              <span style={{ fontWeight: '800', marginRight: '8px' }}>Tanggal diproses:</span>
+              {importStatus.dates.map(d => (
+                <span key={d} className="badge badge-info" style={{ marginRight: '6px', fontSize: '11px' }}>{d}</span>
+              ))}
+            </div>
+          )}
+
           <div style={styles.logWrapper}>
-            <h4 style={{ marginBottom: '10px' }}>Detail Log Baris</h4>
+            <h4 style={{ marginBottom: '10px' }}>Detail Log</h4>
             <div style={styles.logList}>
               {importStatus.details.map((detail, idx) => (
                 <div 
                   key={idx} 
                   style={{
                     ...styles.logItem,
-                    backgroundColor: detail.status === 'success' ? '#F4F9F4' : '#FFF5F5',
-                    borderColor: detail.status === 'success' ? '#D5ECD5' : '#FCDCD5'
+                    backgroundColor: detail.status === 'success' ? '#F4F9F4' : detail.status === 'absent' || detail.status === 'incomplete' ? '#FFF8F0' : '#FFF5F5',
+                    borderColor: detail.status === 'success' ? '#D5ECD5' : detail.status === 'absent' || detail.status === 'incomplete' ? '#F5DEB3' : '#FCDCD5'
                   }}
                 >
-                  <span style={{ fontWeight: '800', width: '80px', color: 'var(--text-muted)' }}>Baris {detail.row}</span>
+                  {detail.row !== '-' && (
+                    <span style={{ fontWeight: '800', width: '80px', color: 'var(--text-muted)' }}>Baris {detail.row}</span>
+                  )}
                   {detail.status === 'success' ? (
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                      <span style={{ color: 'var(--color-success)', fontWeight: '800' }}>[SUKSES]</span>
+                      <span style={{ color: 'var(--color-success)', fontWeight: '800' }}>[HADIR]</span>
                       <span>
-                        Absen <strong>{detail.studentName}</strong> ({detail.className}) jam {detail.time?.substring(0, 5)} - 
+                        <strong>{detail.studentName}</strong> ({detail.className}) jam {detail.time} - 
                         {detail.isLate ? (
                           <strong style={{ color: 'var(--color-warning)' }}> Terlambat</strong>
                         ) : (
                           <strong style={{ color: 'var(--color-success)' }}> Tepat Waktu</strong>
                         )}
+                      </span>
+                    </div>
+                  ) : detail.status === 'incomplete' ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                      <span style={{ color: 'var(--color-warning)', fontWeight: '800' }}>[TIDAK LENGKAP]</span>
+                      <span>
+                        <strong>{detail.studentName}</strong> ({detail.className}) jam masuk {detail.time} — <em>tidak scan keluar</em>
+                      </span>
+                    </div>
+                  ) : detail.status === 'absent' ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                      <span style={{ color: 'var(--color-warning)', fontWeight: '800' }}>[ALFA]</span>
+                      <span>
+                        <strong>{detail.studentName}</strong> ({detail.className}) — tidak ada di CSV tanggal {detail.date}
                       </span>
                     </div>
                   ) : (
@@ -395,7 +540,7 @@ const styles = {
     marginBottom: '28px',
   },
   uploadCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid var(--border-color)',
     padding: '40px',
@@ -414,7 +559,7 @@ const styles = {
     backgroundColor: 'var(--bg-workspace)',
   },
   previewCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid var(--border-color)',
     padding: '24px',
@@ -425,7 +570,20 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
+    marginBottom: '16px',
+  },
+  infoBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 16px',
+    backgroundColor: '#EFF6FF',
+    border: '1.5px solid #BFDBFE',
+    borderRadius: '10px',
+    fontSize: '13px',
+    color: '#1E40AF',
+    marginBottom: '16px',
+    lineHeight: '1.5',
   },
   previewTableWrapper: {
     borderRadius: '8px',
@@ -433,7 +591,7 @@ const styles = {
     overflow: 'hidden',
   },
   reportCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid var(--border-color)',
     padding: '24px',
@@ -449,7 +607,7 @@ const styles = {
   },
   reportStatsGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: '1fr 1fr 1fr',
     gap: '20px',
     marginBottom: '24px',
   },
@@ -461,6 +619,17 @@ const styles = {
     borderRadius: '12px',
     border: '1.5px solid',
   },
+  datesInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '4px',
+    padding: '12px 16px',
+    backgroundColor: 'var(--bg-workspace)',
+    borderRadius: '10px',
+    fontSize: '13px',
+    marginBottom: '20px',
+  },
   logWrapper: {
     marginTop: '20px',
   },
@@ -468,7 +637,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    maxHeight: '260px',
+    maxHeight: '360px',
     overflowY: 'auto',
     paddingRight: '6px',
   },
@@ -479,5 +648,29 @@ const styles = {
     borderRadius: '8px',
     border: '1px solid',
     fontSize: '13px',
+  },
+  paginationWrapper: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '16px',
+    padding: '0 8px',
+  },
+  paginationButtons: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  pageBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    border: '1px solid var(--border-color)',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    color: 'var(--text-dark)',
   }
 };

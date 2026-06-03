@@ -29,7 +29,7 @@ class AuthService {
     try {
       final data = await _client
           .from('profiles')
-          .select('*, classes:classes!profiles_class_id_fkey(*)')
+          .select('*, classes:classes!profiles_class_id_fkey(*, homeroom_teacher:profiles!fk_classes_teacher(full_name, phone))')
           .eq('id', userId)
           .single();
       

@@ -10,6 +10,8 @@ import Classes from './pages/Classes';
 import Schedule from './pages/Schedule';
 import Announcements from './pages/Announcements';
 import CsvImport from './pages/CsvImport';
+import Settings from './pages/Settings';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -86,50 +88,32 @@ function AuthGuard({ children }) {
   };
 
   useEffect(() => {
-    if (!isConfigured) {
-      addLog('Supabase is not configured yet.');
-      return;
-    }
+    if (!isConfigured) return;
     
     let active = true;
 
-    const initializeAuth = async () => {
+    const checkSession = async (currentSession) => {
       try {
-        addLog('Memulai pengecekan sesi (initializeAuth)...');
-        addLog('Memanggil supabase.auth.getSession()...');
-        
-        // Add a safety timeout of 4 seconds so it never hangs indefinitely
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT_GET_SESSION')), 4000)
-        );
-
-        const { data: { session: initialSession } } = await Promise.race([sessionPromise, timeoutPromise]);
-        
-        addLog(`Selesai memanggil getSession. Hasil: ${initialSession ? 'Ada Sesi (' + initialSession.user.email + ')' : 'Tidak Ada Sesi'}`);
-        
-        if (!active) return;
-
-        if (!initialSession) {
-          addLog('Mengarahkan ke login karena tidak ada sesi...');
-          setSession(null);
-          setRole(null);
-          setLoading(false);
+        if (!currentSession) {
+          if (active) {
+            setSession(null);
+            setRole(null);
+            setLoading(false);
+          }
           return;
         }
 
-        addLog(`Mengambil profil untuk user ID: ${initialSession.user.id}...`);
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('role')
-          .eq('id', initialSession.user.id)
+          .eq('id', currentSession.user.id)
           .single();
 
         if (error) {
-          addLog(`Error mengambil profil: ${error.message} (Code: ${error.code})`);
-          addLog('Mencoba sign out karena gagal mengambil profil...');
-          await supabase.auth.signOut();
+          console.error("Error fetching profile on auth check:", error);
           if (active) {
+            // Assume admin temporarily if network error to avoid kicking out,
+            // or just stay loading. But safest is to redirect without signout.
             setSession(null);
             setRole(null);
             setLoading(false);
@@ -137,30 +121,14 @@ function AuthGuard({ children }) {
           return;
         }
 
-        if (!profile) {
-          addLog('Profil tidak ditemukan di database.');
-          addLog('Mencoba sign out karena profil kosong...');
-          await supabase.auth.signOut();
+        if (profile && (profile.role === 'admin' || profile.role === 'teacher')) {
           if (active) {
-            setSession(null);
-            setRole(null);
-            setLoading(false);
-          }
-          return;
-        }
-
-        addLog(`Profil ditemukan. Role: ${profile.role}`);
-
-        if (profile.role === 'admin' || profile.role === 'teacher') {
-          if (active) {
-            addLog('Akses diizinkan. Membuka halaman...');
-            setSession(initialSession);
+            setSession(currentSession);
             setRole(profile.role);
             setLoading(false);
           }
         } else {
-          addLog(`Akses ditolak. Role "${profile.role}" tidak memiliki izin admin/teacher.`);
-          addLog('Mencoba sign out...');
+          // Not authorized
           await supabase.auth.signOut();
           if (active) {
             setSession(null);
@@ -169,52 +137,20 @@ function AuthGuard({ children }) {
           }
         }
       } catch (err) {
-        addLog(`Gagal inisialisasi otentikasi: ${err.message}`);
-        if (active) {
-          setLoading(false);
-        }
+        console.error("Auth check exception:", err);
+        if (active) setLoading(false);
       }
     };
 
-    initializeAuth();
+    // 1. Initial check
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      checkSession(initialSession);
+    });
 
-    // Listen to subsequent changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      addLog(`Event Auth berubah: ${event} (${currentSession?.user?.email || 'tidak ada email'})`);
-      if (!active) return;
-
-      if (event === 'INITIAL_SESSION') return;
-
-      if (currentSession) {
-        try {
-          addLog(`Pengecekan ulang profil untuk user ID: ${currentSession.user.id}...`);
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', currentSession.user.id)
-            .single();
-
-          if (profile && (profile.role === 'admin' || profile.role === 'teacher')) {
-            addLog('Akses diizinkan pada perubahan auth.');
-            setSession(currentSession);
-            setRole(profile.role);
-            setLoading(false);
-          } else {
-            addLog('Akses ditolak pada perubahan auth. Melakukan sign out...');
-            await supabase.auth.signOut();
-            setSession(null);
-            setRole(null);
-            setLoading(false);
-          }
-        } catch (err) {
-          addLog(`Error saat pengecekan ulang auth: ${err.message}`);
-        }
-      } else {
-        addLog('Sesi kosong pada perubahan auth.');
-        setSession(null);
-        setRole(null);
-        setLoading(false);
-      }
+    // 2. Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'INITIAL_SESSION') return;
+      checkSession(session);
     });
 
     return () => {
@@ -270,6 +206,7 @@ export default function App() {
   }
 
   return (
+    <ThemeProvider>
     <Router>
       <Routes>
         {/* Public Route */}
@@ -318,11 +255,18 @@ export default function App() {
             </DashboardLayout>
           </AuthGuard>
         } />
+        <Route path="/pengaturan" element={
+          <AuthGuard>
+            <DashboardLayout>
+              <Settings />
+            </DashboardLayout>
+          </AuthGuard>
+        } />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </ThemeProvider>
   );
 }
 
@@ -332,14 +276,14 @@ const setupStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FAF7F2',
+    backgroundColor: 'var(--bg-workspace)',
     padding: '24px',
     fontFamily: "'Nunito', sans-serif",
   },
   card: {
     width: '100%',
     maxWidth: '680px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid #E6DFD3',
     padding: '40px',

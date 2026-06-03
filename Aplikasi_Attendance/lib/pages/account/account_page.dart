@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/settings_provider.dart';
 import '../../widgets/custom_button.dart';
 
 class AccountPage extends ConsumerWidget {
@@ -16,6 +17,9 @@ class AccountPage extends ConsumerWidget {
   Future<void> _openWhatsApp(String number) async {
     final uri = Uri.parse('https://wa.me/$number');
     if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      // Fallback: try launching directly without canLaunchUrl check
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
@@ -78,6 +82,7 @@ class AccountPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final settingsAsync = ref.watch(settingsProvider);
 
     return authState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -154,7 +159,7 @@ class AccountPage extends ConsumerWidget {
               _buildDivider(),
               _buildDetailRow('Jurusan', user.major ?? '-'),
               _buildDivider(),
-              _buildDetailRow('Wali Kelas', AppConstants.waliKelas),
+              _buildDetailRow('Wali Kelas', user.homeroomTeacher ?? '-'),
 
               const SizedBox(height: 26),
 
@@ -170,14 +175,22 @@ class AccountPage extends ConsumerWidget {
               const SizedBox(height: 12),
               _buildHelpRow(
                 label: 'Wali Kelas',
-                contactName: AppConstants.waliKelas,
-                onTap: () => _openWhatsApp(AppConstants.waliKelasWa),
+                contactName: user.homeroomTeacher ?? 'Belum ditentukan',
+                phoneNumber: user.homeroomTeacherPhone,
+                onTap: user.homeroomTeacherPhone != null && user.homeroomTeacherPhone!.isNotEmpty
+                    ? () => _openWhatsApp(user.homeroomTeacherPhone!)
+                    : null,
               ),
               const SizedBox(height: 10),
-              _buildHelpRow(
-                label: 'Tata Usaha',
-                contactName: AppConstants.tatausaha,
-                onTap: () => _openWhatsApp(AppConstants.tatausahaWa),
+              settingsAsync.when(
+                data: (settings) => _buildHelpRow(
+                  label: 'Tata Usaha',
+                  contactName: settings.adminName,
+                  phoneNumber: settings.adminWaNumber,
+                  onTap: () => _openWhatsApp(settings.adminWaNumber),
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => const SizedBox(),
               ),
 
               const SizedBox(height: 28),
@@ -237,8 +250,10 @@ class AccountPage extends ConsumerWidget {
   Widget _buildHelpRow({
     required String label,
     required String contactName,
-    required VoidCallback onTap,
+    String? phoneNumber,
+    required VoidCallback? onTap,
   }) {
+    final bool isEnabled = onTap != null;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 220) {
@@ -263,26 +278,55 @@ class AccountPage extends ConsumerWidget {
                     onPressed: onTap,
                   ),
                 ),
+                if (!isEnabled)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Nomor belum diisi oleh admin',
+                      style: GoogleFonts.nunito(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
             ),
           );
         }
 
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
-              style: GoogleFonts.nunito(
-                fontSize: 13,
-                color: AppColors.textGray,
-                fontWeight: FontWeight.w500,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.nunito(
+                    fontSize: 13,
+                    color: AppColors.textGray,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                WhatsAppButton(
+                  label: contactName,
+                  onPressed: onTap,
+                ),
+              ],
+            ),
+            if (!isEnabled)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Nomor belum diisi oleh admin',
+                  style: GoogleFonts.nunito(
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
               ),
-            ),
-            WhatsAppButton(
-              label: contactName,
-              onPressed: onTap,
-            ),
           ],
         );
       },

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/settings_provider.dart';
 import '../../widgets/custom_button.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -123,6 +124,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
         uri,
         mode: LaunchMode.externalApplication,
       );
+    } else {
+      // Fallback: try launching directly without canLaunchUrl check
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
     }
   }
 
@@ -138,6 +145,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   @override
   Widget build(BuildContext context) {
+    final settingsAsync = ref.watch(settingsProvider);
     return Scaffold(
       backgroundColor: const Color(0xFFF7F3ED),
 
@@ -457,14 +465,18 @@ class _LoginPageState extends ConsumerState<LoginPage>
                           SizedBox(
                             width: double.infinity,
 
-                            child: WhatsAppButton(
-                              label: AppConstants.tatausaha,
-                              borderRadius: 30,
-                              onPressed: () {
-                                _openWhatsApp(
-                                  AppConstants.tatausahaWa,
-                                );
-                              },
+                            child: settingsAsync.when(
+                              data: (settings) => WhatsAppButton(
+                                label: settings.adminName,
+                                borderRadius: 30,
+                                onPressed: () {
+                                  _openWhatsApp(
+                                    settings.adminWaNumber,
+                                  );
+                                },
+                              ),
+                              loading: () => const Center(child: CircularProgressIndicator()),
+                              error: (err, _) => const SizedBox(),
                             ),
                           ),
                         ],

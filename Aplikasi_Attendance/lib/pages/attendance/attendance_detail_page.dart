@@ -33,7 +33,10 @@ class AttendanceDetailPage extends ConsumerWidget {
     }
   }
 
-  Color _getStatusColor(AttendanceStatus status) {
+  Color _getStatusColor(AttendanceStatus status, bool isLate) {
+    if (status == AttendanceStatus.hadir && isLate) {
+      return const Color(0xFFFFA726); // Orange/warning for late
+    }
     switch (status) {
       case AttendanceStatus.hadir:
         return const Color(0xFF5ED95E); // Bright light green matching mockup Hadir
@@ -46,7 +49,10 @@ class AttendanceDetailPage extends ConsumerWidget {
     }
   }
 
-  Color _getStatusTextColor(AttendanceStatus status) {
+  Color _getStatusTextColor(AttendanceStatus status, bool isLate) {
+    if (status == AttendanceStatus.hadir && isLate) {
+      return Colors.black;
+    }
     switch (status) {
       case AttendanceStatus.hadir:
         return Colors.black;
@@ -178,7 +184,8 @@ class AttendanceDetailPage extends ConsumerWidget {
                       child: Table(
                         columnWidths: const {
                           0: FlexColumnWidth(1.2),
-                          1: FlexColumnWidth(1),
+                          1: FlexColumnWidth(0.8),
+                          2: FlexColumnWidth(1.1),
                         },
                         children: [
                           // Header row
@@ -188,6 +195,7 @@ class AttendanceDetailPage extends ConsumerWidget {
                             ),
                             children: [
                               _buildHeaderCell('Tanggal', showRightBorder: true),
+                              _buildHeaderCell('Jam Masuk', showRightBorder: true),
                               _buildHeaderCell('Keterangan', showRightBorder: false),
                             ],
                           ),
@@ -196,6 +204,16 @@ class AttendanceDetailPage extends ConsumerWidget {
                             final i = entry.key;
                             final record = entry.value;
                             final isLast = i == records.length - 1;
+
+                            String checkInText = '-';
+                            if (record.status == AttendanceStatus.hadir && record.checkInTime != null) {
+                              checkInText = DateFormat('HH:mm').format(record.checkInTime!);
+                            }
+
+                            String labelText = record.status.label;
+                            if (record.status == AttendanceStatus.hadir && record.isLate) {
+                              labelText = 'Terlambat';
+                            }
 
                             return TableRow(
                               children: [
@@ -220,11 +238,32 @@ class AttendanceDetailPage extends ConsumerWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 ),
+                                // Jam Masuk Cell
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      right: const BorderSide(color: Colors.black, width: 1),
+                                      bottom: isLast
+                                          ? BorderSide.none
+                                          : const BorderSide(color: Colors.black, width: 1),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    checkInText,
+                                    style: GoogleFonts.nunito(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textDark,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                                 // Status Cell (filled with status color)
                                 Container(
                                   padding: const EdgeInsets.symmetric(vertical: 8),
                                   decoration: BoxDecoration(
-                                    color: _getStatusColor(record.status),
+                                    color: _getStatusColor(record.status, record.isLate),
                                     border: Border(
                                       bottom: isLast
                                           ? BorderSide.none
@@ -232,11 +271,11 @@ class AttendanceDetailPage extends ConsumerWidget {
                                     ),
                                   ),
                                   child: Text(
-                                    record.status.label,
+                                    labelText,
                                     style: GoogleFonts.nunito(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w800,
-                                      color: _getStatusTextColor(record.status),
+                                      color: _getStatusTextColor(record.status, record.isLate),
                                     ),
                                     textAlign: TextAlign.center,
                                   ),

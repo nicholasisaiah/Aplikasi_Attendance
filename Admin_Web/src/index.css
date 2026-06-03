@@ -23,6 +23,20 @@
   --card-shadow: 0 4px 20px -2px rgba(44, 38, 33, 0.06), 0 2px 8px -1px rgba(44, 38, 33, 0.04);
   --sidebar-width: 250px;
   --navbar-height: 70px;
+  --bg-card: #FFFFFF;
+}
+
+body.dark {
+  --bg-workspace: #1A1311;
+  --bg-card: #281D1A;
+  --text-dark: #F5F1EB;
+  --text-muted: #B8A89A;
+  --border-color: #3D2F28;
+  --card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+  --color-success-bg: #1B3B22;
+  --color-danger-bg: #4A1A1A;
+  --color-warning-bg: #523112;
+  --color-info-bg: #143559;
 }
 
 * {
@@ -104,7 +118,7 @@ a:hover {
   font-size: 14px;
   border: 1.5px solid var(--border-color);
   border-radius: 8px;
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   color: var(--text-dark);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -121,7 +135,7 @@ a:hover {
   overflow-x: auto;
   border-radius: 12px;
   border: 1.5px solid var(--border-color);
-  background-color: #FFFFFF;
+  background-color: var(--bg-card);
   box-shadow: var(--card-shadow);
   margin-bottom: 24px;
 }
@@ -133,7 +147,7 @@ a:hover {
 }
 
 .admin-table th {
-  background-color: #FDFBF8;
+  background-color: var(--bg-workspace);
   color: var(--text-muted);
   font-weight: 800;
   font-size: 13px;

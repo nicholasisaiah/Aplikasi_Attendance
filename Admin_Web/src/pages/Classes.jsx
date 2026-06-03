@@ -15,6 +15,7 @@ export default function Classes() {
     section: '',
     major: '',
     homeroomTeacherId: '',
+    homeroomTeacherPhone: '',
     academicYear: '2025/2026'
   });
   const [modalError, setModalError] = useState('');
@@ -27,7 +28,7 @@ export default function Classes() {
       // Fetch classes and join homeroom teacher
       const { data: classData, error: classErr } = await supabase
         .from('classes')
-        .select('*, profiles:homeroom_teacher_id(full_name)')
+        .select('*, profiles:homeroom_teacher_id(full_name, phone)')
         .order('name');
 
       if (classErr) throw classErr;
@@ -36,7 +37,7 @@ export default function Classes() {
       // Fetch potential homeroom teachers (role = teacher or admin)
       const { data: teacherData, error: teacherErr } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, phone')
         .in('role', ['teacher', 'admin'])
         .order('full_name');
 
@@ -60,6 +61,7 @@ export default function Classes() {
       section: '',
       major: '',
       homeroomTeacherId: '',
+      homeroomTeacherPhone: '',
       academicYear: '2025/2026'
     });
     setModalError('');
@@ -73,6 +75,7 @@ export default function Classes() {
       section: c.section || '',
       major: c.major || '',
       homeroomTeacherId: c.homeroom_teacher_id || '',
+      homeroomTeacherPhone: c.profiles?.phone || '',
       academicYear: c.academic_year || '2025/2026'
     });
     setModalError('');
@@ -113,6 +116,16 @@ export default function Classes() {
           .insert(payload);
 
         if (error) throw error;
+      }
+
+      // Update teacher phone number if a teacher is selected and phone is provided
+      if (formData.homeroomTeacherId && formData.homeroomTeacherPhone) {
+        const { error: phoneErr } = await supabase
+          .from('profiles')
+          .update({ phone: formData.homeroomTeacherPhone })
+          .eq('id', formData.homeroomTeacherId);
+
+        if (phoneErr) console.error('Gagal menyimpan nomor telepon guru:', phoneErr.message);
       }
 
       setIsModalOpen(false);
@@ -166,6 +179,7 @@ export default function Classes() {
                 <th>Tingkat/Section</th>
                 <th>Jurusan</th>
                 <th>Wali Kelas</th>
+                <th>No. HP Wali Kelas</th>
                 <th>Tahun Ajaran</th>
                 <th style={{ textAlign: 'center' }}>Aksi</th>
               </tr>
@@ -173,7 +187,7 @@ export default function Classes() {
             <tbody>
               {classes.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
+                  <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
                     Belum ada kelas yang terdaftar. Klik 'Tambah Kelas' untuk membuat baru.
                   </td>
                 </tr>
@@ -189,6 +203,9 @@ export default function Classes() {
                       ) : (
                         <span style={styles.noTeacher}>Belum Ditentukan</span>
                       )}
+                    </td>
+                    <td style={{ fontSize: '12px', fontWeight: '700' }}>
+                      {c.profiles?.phone || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px' }}>Belum diisi</span>}
                     </td>
                     <td>{c.academic_year}</td>
                     <td style={{ textAlign: 'center' }}>
@@ -277,7 +294,15 @@ export default function Classes() {
                 <select
                   className="form-control"
                   value={formData.homeroomTeacherId}
-                  onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
+                  onChange={(e) => {
+                    const selectedTeacherId = e.target.value;
+                    const selectedTeacher = teachers.find(t => t.id === selectedTeacherId);
+                    setFormData({
+                      ...formData,
+                      homeroomTeacherId: selectedTeacherId,
+                      homeroomTeacherPhone: selectedTeacher?.phone || ''
+                    });
+                  }}
                 >
                   <option value="">Pilih Guru...</option>
                   {teachers.map(t => (
@@ -285,6 +310,22 @@ export default function Classes() {
                   ))}
                 </select>
               </div>
+
+              {formData.homeroomTeacherId && (
+                <div className="form-group">
+                  <label className="form-label">No. Telepon Wali Kelas (WhatsApp)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: 628123456789"
+                    value={formData.homeroomTeacherPhone}
+                    onChange={(e) => setFormData({ ...formData, homeroomTeacherPhone: e.target.value })}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                    Nomor ini akan ditampilkan di aplikasi siswa untuk tombol kontak WhatsApp. Format: 628xxxxxxxxxx
+                  </small>
+                </div>
+              )}
 
               <div className="form-group">
                 <label className="form-label">Tahun Ajaran</label>

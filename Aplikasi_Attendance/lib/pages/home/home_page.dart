@@ -58,7 +58,7 @@ class HomePage extends ConsumerWidget {
                   announcementsState.when(
                     loading: () => _buildShimmerLoading(height: 140),
                     error: (err, _) => _buildErrorCard('Gagal memuat pengumuman: $err'),
-                    data: (announcements) => _buildAnnouncementsList(announcements),
+                    data: (announcements) => _buildAnnouncementsList(announcements, context),
                   ),
                   const SizedBox(height: 24),
                   
@@ -133,7 +133,7 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildAnnouncementsList(List<Announcement> announcements) {
+  Widget _buildAnnouncementsList(List<Announcement> announcements, BuildContext context) {
     if (announcements.isEmpty) {
       return Container(
         width: double.infinity,
@@ -171,73 +171,193 @@ class HomePage extends ConsumerWidget {
         itemCount: announcements.length,
         itemBuilder: (context, index) {
           final ann = announcements[index];
-          return Container(
-            width: 290,
-            margin: const EdgeInsets.only(right: 14),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFD7CCB7), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      ann.emoji,
-                      style: GoogleFonts.nunito(fontSize: 20),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        ann.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.nunito(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
+          return GestureDetector(
+            onTap: () => _showAnnouncementDetail(context, ann),
+            child: Container(
+              width: 290,
+              margin: const EdgeInsets.only(right: 14),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFD7CCB7), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        ann.emoji,
+                        style: GoogleFonts.nunito(fontSize: 20),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          ann.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.nunito(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textDark,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  ann.date,
-                  style: GoogleFonts.nunito(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                    fontWeight: FontWeight.w700,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Text(
-                    ann.content,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 6),
+                  Text(
+                    ann.date,
                     style: GoogleFonts.nunito(
-                      fontSize: 13,
-                      height: 1.35,
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Text(
+                      ann.content,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.nunito(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  // Hint text
+                  Text(
+                    'Ketuk untuk selengkapnya →',
+                    style: GoogleFonts.nunito(
+                      fontSize: 10,
+                      color: AppColors.primaryBrown,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showAnnouncementDetail(BuildContext context, Announcement ann) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Emoji + Title
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ann.emoji,
+                            style: GoogleFonts.nunito(fontSize: 28),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              ann.title,
+                              style: GoogleFonts.nunito(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textDark,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Date
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBrown.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          ann.date,
+                          style: GoogleFonts.nunito(
+                            fontSize: 12,
+                            color: AppColors.primaryBrown,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Image if available
+                      if (ann.imageUrl != null && ann.imageUrl!.isNotEmpty) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            ann.imageUrl!,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      // Full content
+                      Text(
+                        ann.content,
+                        style: GoogleFonts.nunito(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

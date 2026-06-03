@@ -192,7 +192,7 @@ export default function Students() {
                   <tr key={student.id}>
                     <td style={{ fontWeight: '700' }}>{student.full_name}</td>
                     <td>{student.nisn || '-'}</td>
-                    <td>{student.email || '-'}</td>
+                    <td>{student.fingerprint_id ? `siswa.${student.fingerprint_id}@smkasisi.sch.id` : '-'}</td>
                     <td>
                       {student.classes ? (
                         <span className="badge badge-info">{student.classes.name}</span>
@@ -349,7 +349,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     border: '1.5px solid var(--border-color)',
     borderRadius: '8px',
     padding: '0 14px',

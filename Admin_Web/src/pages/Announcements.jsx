@@ -333,7 +333,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '60px 20px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     border: '1.5px dashed var(--border-color)',
     borderRadius: '16px',
     textAlign: 'center',
@@ -345,7 +345,7 @@ const styles = {
     gap: '20px',
   },
   annCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-card)',
     borderRadius: '16px',
     border: '1.5px solid var(--border-color)',
     boxShadow: 'var(--card-shadow)',
