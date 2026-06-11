@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { Plus, Trash2, Clock, Calendar } from 'lucide-react';
+import { resolveMajor } from '../utils/majorUtils';
 
 export default function Schedule() {
   const [classes, setClasses] = useState([]);
@@ -188,7 +189,7 @@ export default function Schedule() {
           onChange={(e) => setSelectedClassId(e.target.value)}
         >
           {classes.map(c => (
-            <option key={c.id} value={c.id}>{c.name} ({c.major})</option>
+            <option key={c.id} value={c.id}>{c.name} ({resolveMajor(c.major)})</option>
           ))}
         </select>
       </div>

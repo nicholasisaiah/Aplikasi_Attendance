@@ -19,8 +19,8 @@ async function main() {
 
   for (let i = 0; i < teachersToCreate.length; i++) {
     const t = teachersToCreate[i];
-    const email = `guru${i+1}@smkasisi.sch.id`;
-    
+    const email = `guru${i + 1}@smkasisi.sch.id`;
+
     // Create auth user
     const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
       email: email,

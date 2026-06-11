@@ -57,6 +57,20 @@ class AuthService {
     await _client.auth.signOut();
   }
 
+  // Change password for currently logged-in user
+  Future<void> changePassword(String newPassword) async {
+    try {
+      final response = await _client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      if (response.user == null) {
+        throw Exception('Gagal mengubah password.');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Update FCM token
   Future<void> updateFcmToken(String token) async {
     final userId = _client.auth.currentUser?.id;

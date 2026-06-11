@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
-import { Search, Edit2, Trash2, AlertTriangle, UserPlus, Check } from 'lucide-react';
+import { Search, Edit2, Trash2, AlertTriangle, UserPlus, Check, KeyRound, Eye, EyeOff, Copy, CheckCircle } from 'lucide-react';
+import { resolveMajor } from '../utils/majorUtils';
 
 export default function Students() {
   const [students, setStudents] = useState([]);
@@ -20,6 +21,16 @@ export default function Students() {
   });
   const [modalError, setModalError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Reset Password Modal State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetStudent, setResetStudent] = useState(null);
+  const [resetPassword, setResetPassword] = useState('AsisiSiswa2026!');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetchStudentsAndClasses = async () => {
     try {
@@ -113,6 +124,68 @@ export default function Students() {
         alert('Gagal menghapus siswa: ' + err.message);
       }
     }
+  };
+
+  // --- Reset Password Handlers ---
+  const handleResetPasswordClick = (student) => {
+    setResetStudent(student);
+    setResetPassword('AsisiSiswa2026!');
+    setShowResetPassword(false);
+    setResetError('');
+    setResetSuccess('');
+    setCopied(false);
+    setIsResetModalOpen(true);
+  };
+
+  const handleResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (!resetPassword || resetPassword.length < 6) {
+      setResetError('Password minimal 6 karakter.');
+      return;
+    }
+
+    setResetting(true);
+    setResetError('');
+    setResetSuccess('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setResetError('Sesi Anda telah berakhir. Silakan login ulang.');
+        return;
+      }
+
+      const response = await fetch('/api/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          studentId: resetStudent.id,
+          newPassword: resetPassword,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Gagal mereset password.');
+      }
+
+      setResetSuccess(`Password berhasil direset untuk ${resetStudent.full_name}.`);
+    } catch (err) {
+      setResetError(err.message || 'Gagal mereset password.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(resetPassword).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   // Filter students based on search query and class selection
@@ -216,6 +289,13 @@ export default function Students() {
                     <td style={{ textAlign: 'center' }}>
                       <div style={styles.actionGroup}>
                         <button
+                          onClick={() => handleResetPasswordClick(student)}
+                          style={styles.actionBtnReset}
+                          title="Reset Password"
+                        >
+                          <KeyRound size={14} />
+                        </button>
+                        <button
                           onClick={() => handleEditClick(student)}
                           style={styles.actionBtnEdit}
                           title="Edit Siswa"
@@ -291,7 +371,7 @@ export default function Students() {
                 >
                   <option value="">Pilih Kelas...</option>
                   {classes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} - {c.major}</option>
+                    <option key={c.id} value={c.id}>{c.name} - {resolveMajor(c.major)}</option>
                   ))}
                 </select>
               </div>
@@ -328,6 +408,130 @@ export default function Students() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {isResetModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Reset Password Siswa</h3>
+              <button 
+                onClick={() => setIsResetModalOpen(false)} 
+                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Student Info */}
+            <div style={styles.resetStudentInfo}>
+              <div style={styles.resetStudentAvatar}>
+                {resetStudent?.full_name?.charAt(0) || 'S'}
+              </div>
+              <div>
+                <div style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-dark)' }}>
+                  {resetStudent?.full_name}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {resetStudent?.fingerprint_id ? `siswa.${resetStudent.fingerprint_id}@smkasisi.sch.id` : 'Email belum tersedia'}
+                </div>
+              </div>
+            </div>
+
+            {resetError && (
+              <div style={styles.modalError}>
+                {resetError}
+              </div>
+            )}
+
+            {resetSuccess && (
+              <div style={styles.resetSuccessBox}>
+                <CheckCircle size={16} />
+                <span>{resetSuccess}</span>
+              </div>
+            )}
+
+            {!resetSuccess ? (
+              <form onSubmit={handleResetPasswordSubmit}>
+                <div className="form-group">
+                  <label className="form-label">Password Baru</label>
+                  <div style={styles.passwordInputWrapper}>
+                    <input
+                      type={showResetPassword ? 'text' : 'password'}
+                      className="form-control"
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      placeholder="Masukkan password baru..."
+                      style={{ paddingRight: '44px' }}
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      style={styles.passwordToggle}
+                    >
+                      {showResetPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '6px', display: 'block' }}>
+                    Password default: <strong>AsisiSiswa2026!</strong> — Minimal 6 karakter.
+                  </small>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setIsResetModalOpen(false)}
+                    disabled={resetting}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={resetting}
+                    style={{ gap: '6px' }}
+                  >
+                    <KeyRound size={14} />
+                    {resetting ? 'Mereset...' : 'Reset Password'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <div className="form-group">
+                  <label className="form-label">Password yang sudah di-set:</label>
+                  <div style={styles.copyPasswordBox}>
+                    <code style={{ flex: 1, fontSize: '14px', fontWeight: '700', color: 'var(--text-dark)' }}>
+                      {resetPassword}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyPassword}
+                      style={styles.copyButton}
+                      title="Salin password"
+                    >
+                      {copied ? <CheckCircle size={14} color="var(--color-success)" /> : <Copy size={14} />}
+                      <span style={{ fontSize: '12px' }}>{copied ? 'Tersalin!' : 'Salin'}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setIsResetModalOpen(false)}
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -424,5 +628,93 @@ const styles = {
     fontSize: '13px',
     fontWeight: '700',
     marginBottom: '16px',
-  }
+  },
+  actionBtnReset: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '30px',
+    height: '30px',
+    borderRadius: '6px',
+    border: 'none',
+    backgroundColor: 'var(--color-warning-bg)',
+    color: 'var(--color-warning)',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  resetStudentInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '14px 16px',
+    backgroundColor: 'var(--bg-workspace)',
+    borderRadius: '10px',
+    marginBottom: '16px',
+    border: '1px solid var(--border-color)',
+  },
+  resetStudentAvatar: {
+    width: '38px',
+    height: '38px',
+    borderRadius: '8px',
+    backgroundColor: 'var(--color-primary)',
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  resetSuccessBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--color-success-bg)',
+    color: 'var(--color-success)',
+    border: '1.5px solid var(--color-success)',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '700',
+    marginBottom: '16px',
+  },
+  passwordInputWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: '12px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--text-muted)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px',
+  },
+  copyPasswordBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 14px',
+    backgroundColor: 'var(--bg-workspace)',
+    borderRadius: '8px',
+    border: '1.5px solid var(--border-color)',
+  },
+  copyButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 10px',
+    borderRadius: '6px',
+    border: '1px solid var(--border-color)',
+    backgroundColor: 'var(--bg-card)',
+    color: 'var(--text-dark)',
+    cursor: 'pointer',
+    fontWeight: '700',
+    fontSize: '12px',
+    transition: 'background-color 0.2s',
+  },
 };

@@ -7,6 +7,8 @@ import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
 import '../core/providers/auth_provider.dart';
 
+import '../core/services/supabase_service.dart';
+
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
 
@@ -61,10 +63,10 @@ class _SplashPageState extends ConsumerState<SplashPage>
     
     if (!mounted) return;
 
-    // Refresh session or read auth provider value
-    final user = ref.read(authProvider).value;
+    // Check supabase session directly to avoid AsyncValue.loading null result
+    final session = SupabaseService.client.auth.currentSession;
     
-    if (user != null) {
+    if (session != null) {
       Navigator.pushReplacementNamed(
         context,
         AppConstants.routeMain,

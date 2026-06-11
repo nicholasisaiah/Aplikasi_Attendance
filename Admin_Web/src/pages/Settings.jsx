@@ -108,21 +108,6 @@ export default function Settings() {
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="school_name" className="form-label">
-              Nama Sekolah
-            </label>
-            <input
-              type="text"
-              id="school_name"
-              name="school_name"
-              value={settings.school_name}
-              onChange={handleChange}
-              className="form-control"
-              required
-            />
-          </div>
-
           <div style={styles.row}>
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="admin_name" className="form-label">
@@ -239,5 +224,13 @@ const styles = {
     color: 'var(--text-muted)',
     fontWeight: '700',
     fontSize: '14px',
+  },
+  readOnlyField: {
+    padding: '12px 16px',
+    backgroundColor: '#F3EFE9',
+    border: '1.5px solid var(--border-color)',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
   }
 };

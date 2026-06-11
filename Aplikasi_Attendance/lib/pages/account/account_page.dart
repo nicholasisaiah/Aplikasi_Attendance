@@ -10,6 +10,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/settings_provider.dart';
 import '../../widgets/custom_button.dart';
+import 'change_password_page.dart';
 
 class AccountPage extends ConsumerWidget {
   const AccountPage({super.key});
@@ -160,6 +161,66 @@ class AccountPage extends ConsumerWidget {
               _buildDetailRow('Jurusan', user.major ?? '-'),
               _buildDivider(),
               _buildDetailRow('Wali Kelas', user.homeroomTeacher ?? '-'),
+
+              const SizedBox(height: 26),
+
+              // --- Change password button ---
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ChangePasswordPage(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBrown.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.lock_outline_rounded,
+                          size: 18,
+                          color: AppColors.primaryBrown,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Ubah Password',
+                          style: GoogleFonts.nunito(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: AppColors.textGray.withValues(alpha: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
               const SizedBox(height: 26),
 

@@ -1,11 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { Plus, Trash2, Edit2, ShieldAlert } from 'lucide-react';
+import { MAJOR_OPTIONS, resolveMajor } from '../utils/majorUtils';
+
+const SECTION_OPTIONS = [
+  { value: 'X', label: 'X (Kelas 10)' },
+  { value: 'XI', label: 'XI (Kelas 11)' },
+  { value: 'XII', label: 'XII (Kelas 12)' },
+];
+
+const SECTION_ORDER = { 'X': 1, 'XI': 2, 'XII': 3 };
 
 export default function Classes() {
   const [classes, setClasses] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filterSection, setFilterSection] = useState('');
+  const [filterMajor, setFilterMajor] = useState('');
+  const [filterTeacher, setFilterTeacher] = useState('');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,7 +85,7 @@ export default function Classes() {
     setFormData({
       name: c.name || '',
       section: c.section || '',
-      major: c.major || '',
+      major: resolveMajor(c.major),
       homeroomTeacherId: c.homeroom_teacher_id || '',
       homeroomTeacherPhone: c.profiles?.phone || '',
       academicYear: c.academic_year || '2025/2026'
@@ -153,6 +165,24 @@ export default function Classes() {
     }
   };
 
+  // Build unique teacher list from loaded classes for filter dropdown
+  const assignedTeachers = classes
+    .filter(c => c.profiles?.full_name)
+    .reduce((acc, c) => {
+      const name = c.profiles.full_name;
+      if (!acc.find(t => t.name === name)) acc.push({ id: c.homeroom_teacher_id, name });
+      return acc;
+    }, [])
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Filter classes based on dropdown selections
+  const filteredClasses = classes.filter(c => {
+    const matchSection = filterSection === '' || c.section === filterSection;
+    const matchMajor = filterMajor === '' || resolveMajor(c.major) === filterMajor;
+    const matchTeacher = filterTeacher === '' || c.homeroom_teacher_id === filterTeacher;
+    return matchSection && matchMajor && matchTeacher;
+  });
+
   return (
     <div className="page-container">
       <div style={styles.header}>
@@ -166,6 +196,45 @@ export default function Classes() {
         </button>
       </div>
 
+      {/* Filter Dropdowns */}
+      <div style={styles.filterSection}>
+        <select
+          className="form-control"
+          style={{ width: '160px' }}
+          value={filterSection}
+          onChange={(e) => setFilterSection(e.target.value)}
+        >
+          <option value="">Semua Tingkat</option>
+          {SECTION_OPTIONS.map(s => (
+            <option key={s.value} value={s.value}>{s.value}</option>
+          ))}
+        </select>
+
+        <select
+          className="form-control"
+          style={{ width: '260px' }}
+          value={filterMajor}
+          onChange={(e) => setFilterMajor(e.target.value)}
+        >
+          <option value="">Semua Jurusan</option>
+          {MAJOR_OPTIONS.map(m => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+
+        <select
+          className="form-control"
+          style={{ width: '200px' }}
+          value={filterTeacher}
+          onChange={(e) => setFilterTeacher(e.target.value)}
+        >
+          <option value="">Semua Wali Kelas</option>
+          {assignedTeachers.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+      </div>
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <h3 style={{ color: 'var(--text-muted)' }}>Memuat data kelas...</h3>
@@ -176,7 +245,7 @@ export default function Classes() {
             <thead>
               <tr>
                 <th>Nama Kelas</th>
-                <th>Tingkat/Section</th>
+                <th>Tingkat</th>
                 <th>Jurusan</th>
                 <th>Wali Kelas</th>
                 <th>No. HP Wali Kelas</th>
@@ -185,18 +254,18 @@ export default function Classes() {
               </tr>
             </thead>
             <tbody>
-              {classes.length === 0 ? (
+              {filteredClasses.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                    Belum ada kelas yang terdaftar. Klik 'Tambah Kelas' untuk membuat baru.
+                    {classes.length === 0 ? "Belum ada kelas yang terdaftar. Klik 'Tambah Kelas' untuk membuat baru." : 'Tidak ada kelas yang cocok dengan filter.'}
                   </td>
                 </tr>
               ) : (
-                classes.map(c => (
+                filteredClasses.map(c => (
                   <tr key={c.id}>
                     <td style={{ fontWeight: '700' }}>{c.name}</td>
                     <td>{c.section || '-'}</td>
-                    <td>{c.major || '-'}</td>
+                    <td>{resolveMajor(c.major) || '-'}</td>
                     <td>
                       {c.profiles ? (
                         <span style={styles.teacherBadge}>{c.profiles.full_name}</span>
@@ -269,24 +338,30 @@ export default function Classes() {
 
               <div className="form-group">
                 <label className="form-label">Tingkat / Section</label>
-                <input
-                  type="text"
+                <select
                   className="form-control"
-                  placeholder="Contoh: XII atau XI"
                   value={formData.section}
                   onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                />
+                >
+                  <option value="">Pilih Tingkat...</option>
+                  {SECTION_OPTIONS.map(s => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Jurusan</label>
-                <input
-                  type="text"
+                <select
                   className="form-control"
-                  placeholder="Contoh: Teknik Komputer Jaringan"
                   value={formData.major}
                   onChange={(e) => setFormData({ ...formData, major: e.target.value })}
-                />
+                >
+                  <option value="">Pilih Jurusan...</option>
+                  {MAJOR_OPTIONS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
@@ -370,6 +445,12 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '28px',
+  },
+  filterSection: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '20px',
+    flexWrap: 'wrap',
   },
   teacherBadge: {
     display: 'inline-flex',
