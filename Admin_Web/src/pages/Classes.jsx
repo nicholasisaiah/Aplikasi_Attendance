@@ -305,8 +305,8 @@ export default function Classes() {
 
       {/* Create/Edit Class Modal */}
       {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingClass ? 'Edit Kelas' : 'Tambah Kelas Baru'}</h3>
               <button 
