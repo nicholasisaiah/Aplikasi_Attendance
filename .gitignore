@@ -1,0 +1,16 @@
+# Flutter files
+Aplikasi_Attendance/.dart_tool/
+Aplikasi_Attendance/build/
+Aplikasi_Attendance/.flutter-plugins
+Aplikasi_Attendance/.flutter-plugins-dependencies
+Aplikasi_Attendance/android/app/key.properties
+
+# Node/Vite files
+Admin_Web/node_modules/
+Admin_Web/dist/
+Admin_Web/.env
+Admin_Web/.env.local
+
+# OS files
+.DS_Store
+Thumbs.db

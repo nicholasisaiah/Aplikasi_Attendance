@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
-import { Search, Edit2, Trash2, AlertTriangle, UserPlus, Check, KeyRound, Eye, EyeOff, Copy, CheckCircle } from 'lucide-react';
+import { Search, Edit2, Trash2, AlertTriangle, UserPlus, Check, KeyRound, Eye, EyeOff, Copy, CheckCircle, Plus } from 'lucide-react';
 import { resolveMajor } from '../utils/majorUtils';
 
 export default function Students() {
@@ -21,6 +21,22 @@ export default function Students() {
   });
   const [modalError, setModalError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Create Student Modal State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createFormData, setCreateFormData] = useState({
+    fullName: '',
+    nisn: '',
+    fingerprintId: '',
+    classId: '',
+    password: 'AsisiSiswa2026!'
+  });
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createSuccess, setCreateSuccess] = useState(null); // holds created student info
+  const [creating, setCreating] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
 
   // Reset Password Modal State
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -63,6 +79,101 @@ export default function Students() {
   useEffect(() => {
     fetchStudentsAndClasses();
   }, []);
+
+  // --- Create Student Handlers ---
+  const handleCreateClick = () => {
+    setCreateFormData({
+      fullName: '',
+      nisn: '',
+      fingerprintId: '',
+      classId: '',
+      password: 'AsisiSiswa2026!'
+    });
+    setShowCreatePassword(false);
+    setCreateError('');
+    setCreateSuccess(null);
+    setCopiedEmail(false);
+    setCopiedPassword(false);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault();
+    if (!createFormData.fullName.trim()) {
+      setCreateError('Nama lengkap wajib diisi.');
+      return;
+    }
+    if (!createFormData.fingerprintId && createFormData.fingerprintId !== 0) {
+      setCreateError('Fingerprint ID wajib diisi untuk pembuatan akun.');
+      return;
+    }
+    if (!createFormData.password || createFormData.password.length < 6) {
+      setCreateError('Password minimal 6 karakter.');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setCreateError('Sesi Anda telah berakhir. Silakan login ulang.');
+        return;
+      }
+
+      const response = await fetch('/api/create-student', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          fullName: createFormData.fullName,
+          nisn: createFormData.nisn,
+          fingerprintId: createFormData.fingerprintId,
+          classId: createFormData.classId,
+          password: createFormData.password,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Gagal membuat akun siswa.');
+      }
+
+      setCreateSuccess({
+        fullName: result.student.fullName,
+        email: result.student.email,
+        password: createFormData.password,
+        fingerprintId: result.student.fingerprintId,
+      });
+      fetchStudentsAndClasses();
+    } catch (err) {
+      setCreateError(err.message || 'Gagal membuat akun siswa.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCopyEmail = () => {
+    if (createSuccess?.email) {
+      navigator.clipboard.writeText(createSuccess.email).then(() => {
+        setCopiedEmail(true);
+        setTimeout(() => setCopiedEmail(false), 2000);
+      });
+    }
+  };
+
+  const handleCopyCreatePassword = () => {
+    if (createSuccess?.password) {
+      navigator.clipboard.writeText(createSuccess.password).then(() => {
+        setCopiedPassword(true);
+        setTimeout(() => setCopiedPassword(false), 2000);
+      });
+    }
+  };
 
   const handleEditClick = (student) => {
     setEditingStudent(student);
@@ -207,6 +318,10 @@ export default function Students() {
           <h1>Data Siswa</h1>
           <p>Manajemen data siswa, kelas, dan nomor sidik jari (Fingerprint ID).</p>
         </div>
+        <button className="btn btn-primary" onClick={handleCreateClick}>
+          <Plus size={16} />
+          <span>Tambah Siswa</span>
+        </button>
       </div>
 
       {/* Filters and Search Bar */}
@@ -319,10 +434,194 @@ export default function Students() {
         </div>
       )}
 
+      {/* Create Student Modal */}
+      {isCreateModalOpen && (
+        <div className="modal-overlay" onClick={() => { if (!creating) setIsCreateModalOpen(false); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{createSuccess ? 'Akun Siswa Berhasil Dibuat' : 'Tambah Siswa Baru'}</h3>
+              <button 
+                onClick={() => setIsCreateModalOpen(false)} 
+                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {createError && (
+              <div style={styles.modalError}>
+                {createError}
+              </div>
+            )}
+
+            {!createSuccess ? (
+              <form onSubmit={handleCreateSubmit}>
+                <div className="form-group">
+                  <label className="form-label">Nama Lengkap *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: Ahmad Rizki"
+                    value={createFormData.fullName}
+                    onChange={(e) => setCreateFormData({ ...createFormData, fullName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">NISN</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: 0054298132"
+                    value={createFormData.nisn}
+                    onChange={(e) => setCreateFormData({ ...createFormData, nisn: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Fingerprint ID *</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="Nomor ID sidik jari di mesin, misal: 1"
+                    value={createFormData.fingerprintId}
+                    onChange={(e) => setCreateFormData({ ...createFormData, fingerprintId: e.target.value })}
+                    required
+                    min="0"
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                    ID ini juga digunakan sebagai email login: <strong>siswa.{createFormData.fingerprintId || '?'}@smkasisi.sch.id</strong>
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Kelas</label>
+                  <select
+                    className="form-control"
+                    value={createFormData.classId}
+                    onChange={(e) => setCreateFormData({ ...createFormData, classId: e.target.value })}
+                  >
+                    <option value="">Pilih Kelas...</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} - {resolveMajor(c.major)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Password *</label>
+                  <div style={styles.passwordInputWrapper}>
+                    <input
+                      type={showCreatePassword ? 'text' : 'password'}
+                      className="form-control"
+                      value={createFormData.password}
+                      onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
+                      placeholder="Masukkan password..."
+                      style={{ paddingRight: '44px' }}
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePassword(!showCreatePassword)}
+                      style={styles.passwordToggle}
+                    >
+                      {showCreatePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '6px', display: 'block' }}>
+                    Password default: <strong>AsisiSiswa2026!</strong> — Minimal 6 karakter.
+                  </small>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setIsCreateModalOpen(false)}
+                    disabled={creating}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={creating}
+                    style={{ gap: '6px' }}
+                  >
+                    <UserPlus size={14} />
+                    {creating ? 'Membuat Akun...' : 'Buat Akun Siswa'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <div style={styles.createSuccessBox}>
+                  <CheckCircle size={16} />
+                  <span>Akun untuk <strong>{createSuccess.fullName}</strong> berhasil dibuat!</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Login</label>
+                  <div style={styles.copyPasswordBox}>
+                    <code style={{ flex: 1, fontSize: '14px', fontWeight: '700', color: 'var(--text-dark)' }}>
+                      {createSuccess.email}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyEmail}
+                      style={styles.copyButton}
+                      title="Salin email"
+                    >
+                      {copiedEmail ? <CheckCircle size={14} color="var(--color-success)" /> : <Copy size={14} />}
+                      <span style={{ fontSize: '12px' }}>{copiedEmail ? 'Tersalin!' : 'Salin'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <div style={styles.copyPasswordBox}>
+                    <code style={{ flex: 1, fontSize: '14px', fontWeight: '700', color: 'var(--text-dark)' }}>
+                      {createSuccess.password}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyCreatePassword}
+                      style={styles.copyButton}
+                      title="Salin password"
+                    >
+                      {copiedPassword ? <CheckCircle size={14} color="var(--color-success)" /> : <Copy size={14} />}
+                      <span style={{ fontSize: '12px' }}>{copiedPassword ? 'Tersalin!' : 'Salin'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div style={styles.credentialNote}>
+                  <AlertTriangle size={14} color="var(--color-warning)" />
+                  <span>Catat informasi di atas dan berikan kepada siswa. Password tidak dapat dilihat lagi setelah modal ini ditutup.</span>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setIsCreateModalOpen(false)}
+                  >
+                    Selesai
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Edit Student Modal */}
       {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Edit Data Siswa</h3>
               <button 
@@ -414,8 +713,8 @@ export default function Students() {
 
       {/* Reset Password Modal */}
       {isResetModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" onClick={() => setIsResetModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Reset Password Siswa</h3>
               <button 
@@ -541,6 +840,9 @@ export default function Students() {
 
 const styles = {
   header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: '28px',
   },
   filterSection: {
@@ -716,5 +1018,31 @@ const styles = {
     fontWeight: '700',
     fontSize: '12px',
     transition: 'background-color 0.2s',
+  },
+  createSuccessBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--color-success-bg)',
+    color: 'var(--color-success)',
+    border: '1.5px solid var(--color-success)',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '700',
+    marginBottom: '16px',
+  },
+  credentialNote: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--color-warning-bg)',
+    color: 'var(--color-warning)',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: '700',
+    marginTop: '8px',
+    lineHeight: '1.5',
   },
 };
